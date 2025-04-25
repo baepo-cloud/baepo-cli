@@ -7,6 +7,7 @@ import (
 	"github.com/baepo-cloud/baepo-cli/pkg/iostream"
 	apiv1pb "github.com/baepo-cloud/baepo-proto/go/baepo/api/v1"
 	corev1pb "github.com/baepo-cloud/baepo-proto/go/baepo/core/v1"
+	"github.com/dustin/go-humanize"
 )
 
 // MachineArrayConfig returns the declarative configuration for mapping Machine arrays.
@@ -50,6 +51,12 @@ func MachineMapping() []any {
 						return fmt.Sprint(obj.Cpus)
 					},
 				},
+				iostream.FieldConfig{
+					DisplayName: "Memory",
+					FormatFunc: func(obj *corev1pb.MachineSpec) string {
+						return humanize.Bytes(obj.MemoryMb * 1024 * 1024)
+					},
+				},
 				iostream.ArrayConfig{
 					Path:        "Containers",
 					DisplayName: "Containers",
@@ -59,6 +66,24 @@ func MachineMapping() []any {
 								DisplayName: "Image",
 								FormatFunc: func(obj *corev1pb.MachineContainerSpec) string {
 									return fmt.Sprint(obj.Image)
+								},
+							},
+							iostream.FieldConfig{
+								DisplayName: "Env",
+								FormatFunc: func(obj *corev1pb.MachineContainerSpec) string {
+									if len(obj.Env) == 0 {
+										return "-"
+									}
+									return EnvToHumanString(obj.Env)
+								},
+							},
+							iostream.FieldConfig{
+								DisplayName: "Healthcheck",
+								FormatFunc: func(obj *corev1pb.MachineContainerSpec) string {
+									if obj.Healthcheck == nil {
+										return "-"
+									}
+									return MachineContainerHealthcheckSpecToHumanString(obj.Healthcheck)
 								},
 							},
 							iostream.FieldConfig{

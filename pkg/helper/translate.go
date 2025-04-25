@@ -1,6 +1,9 @@
 package helper
 
 import (
+	"fmt"
+	"strings"
+
 	corev1pb "github.com/baepo-cloud/baepo-proto/go/baepo/core/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -65,4 +68,59 @@ func MachineTerminationCauseToHumanString(cause corev1pb.MachineTerminationCause
 	default:
 		return blank
 	}
+}
+
+func EnvToHumanString(env map[string]string) string {
+	if len(env) == 0 {
+		return blank
+	}
+	envStr := ""
+	for k, v := range env {
+		envStr += k + "=" + v + " "
+	}
+	return envStr
+}
+
+func MachineContainerHealthcheckSpecToHumanString(hc *corev1pb.MachineContainerHealthcheckSpec) string {
+	if hc == nil {
+		return blank
+	}
+
+	parts := []string{}
+
+	if hc.InitialDelaySeconds != 0 {
+		parts = append(parts, fmt.Sprintf("Initial Delay: %ds", hc.InitialDelaySeconds))
+	}
+
+	if hc.PeriodSeconds != 0 {
+		parts = append(parts, fmt.Sprintf("Period: %ds", hc.PeriodSeconds))
+	}
+
+	if http := hc.GetHttp(); http != nil {
+		if http.Method != "" {
+			parts = append(parts, fmt.Sprintf("Method: %s", http.Method))
+		}
+
+		if http.Port != 0 {
+			parts = append(parts, fmt.Sprintf("Port: %d", http.Port))
+		}
+
+		if http.Path != "" {
+			parts = append(parts, fmt.Sprintf("Path: %s", http.Path))
+		}
+
+		if len(http.Headers) > 0 {
+			headerParts := []string{}
+			for k, v := range http.Headers {
+				headerParts = append(headerParts, fmt.Sprintf("%s=%s", k, v))
+			}
+			parts = append(parts, fmt.Sprintf("Headers: %s", strings.Join(headerParts, ", ")))
+		}
+	}
+
+	if len(parts) == 0 {
+		return blank
+	}
+
+	return strings.Join(parts, ", ")
 }

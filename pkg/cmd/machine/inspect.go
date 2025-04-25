@@ -14,7 +14,7 @@ import (
 
 func newInspectCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:     "inspect",
+		Use:     "inspect <id>",
 		Short:   "Inspect a machine",
 		Example: `baepo machine inspect <id>`,
 
