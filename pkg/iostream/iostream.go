@@ -3,17 +3,11 @@
 package iostream
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"reflect"
 	"strings"
-	"text/tabwriter"
-
-	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/proto"
 )
 
 // IOStream is the core structure for handling CLI output in either plain text or JSON format.
@@ -86,446 +80,273 @@ func (s *IOStream) ErrorWithDetails(opts ErrorOptions, args ...interface{}) {
 	}
 }
 
-// ObjectFormatter is a custom formatter for an entire object
-type ObjectFormatter interface {
-	// GetFields returns the list of field names to be included in the output
-	GetFields() []string
-	// FormatField handles the formatting of a specific field
-	FormatField(fieldName string, value interface{}) (string, string)
-}
-
-// FieldDefinition describes how to access and format a specific field
-type FieldDefinition struct {
-	// DisplayName is the name to use in output (e.g., "RAM" instead of "memory_mb")
-	DisplayName string
-	// FormatFunc takes the entire object and returns a formatted string for this field
-	FormatFunc func(obj interface{}) string
-}
-
-// ObjectOptions contains options for customizing Object output
+// ObjectOptions provides configuration options for the Object function
 type ObjectOptions struct {
-	// Fields specifies which fields to include and how to format them
-	Fields []FieldDefinition
+	Full bool
 }
 
-// ArrayOptions contains options for customizing Array output
-type ArrayOptions struct {
-	// Fields specifies which fields to include and how to format them
-	Fields []FieldDefinition
-}
-
-// Object outputs a single object/map with customizable field selection and formatting
-func (s *IOStream) Object(data interface{}, opts ...ObjectOptions) {
-	if s.JSONOutput {
-		s.writeJSON(s.Stdout, data)
-		return
-	}
-
-	var options ObjectOptions
-	if len(opts) > 0 {
-		options = opts[0]
-	}
-
-	// For plain text output, display in key-value format
-	w := tabwriter.NewWriter(s.Stdout, 0, 0, 3, ' ', 0)
-	defer w.Flush()
-
-	if len(options.Fields) > 0 {
-		// Use field definitions
-		for _, field := range options.Fields {
-			if field.FormatFunc != nil {
-				displayValue := field.FormatFunc(data)
-				fmt.Fprintf(w, "%s:\t%s\n", field.DisplayName, displayValue)
-			}
-		}
-		return
-	}
-
-	// Extract the actual message from wrapper structures like response messages
-	// This handles cases where data might be in a nested field like Msg.machine
-	extractedData := extractNestedObject(data)
-
-	// Default behavior - show all fields
-	iterateObject(extractedData, func(key string, value interface{}) {
-		var strValue string
-		switch v := value.(type) {
-		case string:
-			strValue = v
-		case fmt.Stringer:
-			strValue = v.String()
-		default:
-			strValue = fmt.Sprintf("%v", v)
-		}
-
-		fmt.Fprintf(w, "%s:\t%s\n", key, strValue)
-	})
-}
-
-// extractNestedObject attempts to extract the actual data object from wrapper structures
-// like response messages that have fields like "Msg" containing the actual data
-func extractNestedObject(data interface{}) interface{} {
-	// If data is nil, return it as is
+// Array processes and displays a slice of objects of type T based on the provided configuration
+func (s *IOStream) Array(data interface{}, config []any, opts ObjectOptions) {
 	if data == nil {
-		return data
+		return
 	}
 
-	v := reflect.ValueOf(data)
-
-	// Handle pointers
-	if v.Kind() == reflect.Ptr {
-		if v.IsNil() {
-			return data
-		}
-		v = v.Elem()
-	}
-
-	// Only process structs
-	if v.Kind() != reflect.Struct {
-		return data
-	}
-
-	// Look for common wrapper fields like "Msg" or "Response"
-	for _, fieldName := range []string{"Msg", "Response", "Data", "Result"} {
-		field := v.FieldByName(fieldName)
-		if field.IsValid() && field.CanInterface() {
-			msgValue := field.Interface()
-
-			// If this field is itself a struct or ptr to struct, check for common data fields
-			msgReflect := reflect.ValueOf(msgValue)
-			if msgReflect.Kind() == reflect.Ptr {
-				if msgReflect.IsNil() {
-					continue
-				}
-				msgReflect = msgReflect.Elem()
-			}
-
-			if msgReflect.Kind() == reflect.Struct {
-				// Look for common data fields like "machine", "item", etc.
-				for _, dataFieldName := range []string{"machine", "item", "user", "resource", "object"} {
-					dataField := msgReflect.FieldByName(dataFieldName)
-					if dataField.IsValid() && dataField.CanInterface() {
-						return dataField.Interface()
-					}
-				}
-
-				// If we didn't find a specific data field but found a wrapper field, return that
-				return msgValue
-			}
-
-			// If Msg/Response is not a struct but some other value, return it
-			return msgValue
-		}
-	}
-
-	// If we didn't find any known wrapper fields, return the original data
-	return data
-}
-
-// Array outputs an array/slice of objects with customizable field selection and formatting
-func (s *IOStream) Array(data interface{}, opts ...ArrayOptions) {
 	if s.JSONOutput {
 		s.writeJSON(s.Stdout, data)
 		return
 	}
 
-	// For plain text, create a tabulated output
-	w := tabwriter.NewWriter(s.Stdout, 0, 0, 3, ' ', 0)
-	defer w.Flush()
-
-	// Process options
-	var options ArrayOptions
-	if len(opts) > 0 {
-		options = opts[0]
-	}
-
-	// Convert to slice
-	slice, ok := convertToSlice(data)
-	if !ok || len(slice) == 0 {
-		fmt.Fprintln(s.Stdout, "No data to display")
+	// Get the slice value
+	sliceVal := reflect.ValueOf(data)
+	if sliceVal.Kind() != reflect.Slice {
+		fmt.Fprintln(s.Stderr, "Error: data is not a slice")
 		return
 	}
 
-	// Determine headers and format data based on options
-	var headers []string
-	var rows [][]string
-
-	if len(options.Fields) > 0 {
-		// Use field definitions
-		for _, field := range options.Fields {
-			headers = append(headers, field.DisplayName)
+	// Extract headers from config
+	headers := make([]string, 0)
+	for _, cfg := range config {
+		switch c := cfg.(type) {
+		case FieldConfig:
+			if !c.Verbose || opts.Full {
+				headers = append(headers, c.DisplayName)
+			}
 		}
+	}
 
-		for _, item := range slice {
-			row := make([]string, len(headers))
-			for i, field := range options.Fields {
-				if field.FormatFunc != nil {
-					row[i] = field.FormatFunc(item)
-				} else {
-					row[i] = "-"
+	// Docker CLI-like table
+	// Calculate column widths (minimum width = length of header)
+	colWidths := make([]int, len(headers))
+	for i, h := range headers {
+		colWidths[i] = len(h)
+	}
+
+	// Build rows
+	rows := make([][]string, sliceVal.Len())
+	for i := 0; i < sliceVal.Len(); i++ {
+		obj := sliceVal.Index(i).Interface()
+		row := make([]string, 0, len(headers))
+
+		headerIdx := 0
+		for _, cfg := range config {
+			switch c := cfg.(type) {
+			case FieldConfig:
+				if !c.Verbose || opts.Full {
+					formatterVal := reflect.ValueOf(c.FormatFunc)
+					args := []reflect.Value{reflect.ValueOf(obj)}
+					result := formatterVal.Call(args)
+					value := result[0].String()
+
+					row = append(row, value)
+					if len(value) > colWidths[headerIdx] {
+						colWidths[headerIdx] = len(value)
+					}
+					headerIdx++
 				}
 			}
-			rows = append(rows, row)
 		}
-	} else {
-		// Default behavior - extract headers from first item
-		headerMap := make(map[string]bool)
-		iterateObject(slice[0], func(key string, value interface{}) {
-			if !headerMap[key] {
-				headers = append(headers, key)
-				headerMap[key] = true
-			}
-		})
-
-		// Process each item
-		for _, item := range slice {
-			valueMap := make(map[string]string)
-
-			iterateObject(item, func(key string, value interface{}) {
-				var strValue string
-				switch v := value.(type) {
-				case string:
-					strValue = v
-				case fmt.Stringer:
-					strValue = v.String()
-				default:
-					strValue = fmt.Sprintf("%v", v)
-				}
-				valueMap[key] = strValue
-			})
-
-			row := make([]string, len(headers))
-			for i, header := range headers {
-				row[i] = valueMap[header]
-			}
-			rows = append(rows, row)
-		}
+		rows[i] = row
 	}
 
 	// Print headers
-	fmt.Fprintln(w, strings.Join(headers, "\t"))
+	for i, h := range headers {
+		if i > 0 {
+			fmt.Fprint(s.Stdout, "  ")
+		}
+		fmt.Fprintf(s.Stdout, "%-*s", colWidths[i], h)
+	}
+	fmt.Fprintln(s.Stdout)
 
 	// Print rows
 	for _, row := range rows {
-		fmt.Fprintln(w, strings.Join(row, "\t"))
-	}
-}
-
-// These helper functions for path extraction have been removed as they're no longer needed
-// with the simplified field definition approach that takes the whole object
-
-func (s *IOStream) writeJSON(w io.Writer, data interface{}) {
-	// Check if data is a proto.Message or a slice of proto.Message
-	switch v := data.(type) {
-	case proto.Message:
-		marshaler := protojson.MarshalOptions{
-			Indent:          "  ",
-			EmitUnpopulated: false,
-		}
-		jsonBytes, err := marshaler.Marshal(v)
-		if err != nil {
-			fmt.Fprintf(s.Stderr, "Error encoding proto to JSON: %v\n", err)
-			return
-		}
-		if _, err := w.Write(jsonBytes); err != nil {
-			fmt.Fprintf(s.Stderr, "Error writing JSON: %v\n", err)
-		}
-		if _, err := w.Write([]byte("\n")); err != nil {
-			fmt.Fprintf(s.Stderr, "Error writing newline: %v\n", err)
-		}
-	default:
-		// Check if it's a slice of proto.Message
-		if isSliceOfProtoMessages(data) {
-			jsonBytes, err := marshalSliceOfProtoMessages(data)
-			if err != nil {
-				fmt.Fprintf(s.Stderr, "Error encoding proto slice to JSON: %v\n", err)
-				return
-			}
-			if _, err := w.Write(jsonBytes); err != nil {
-				fmt.Fprintf(s.Stderr, "Error writing JSON: %v\n", err)
-			}
-			if _, err := w.Write([]byte("\n")); err != nil {
-				fmt.Fprintf(s.Stderr, "Error writing newline: %v\n", err)
-			}
-		} else {
-			// Use standard json for regular data
-			encoder := json.NewEncoder(w)
-			encoder.SetIndent("", "  ")
-			if err := encoder.Encode(data); err != nil {
-				fmt.Fprintf(s.Stderr, "Error encoding JSON: %v\n", err)
-			}
-		}
-	}
-}
-
-// Helper functions for handling various data types (unchanged from original)
-func isSliceOfProtoMessages(data interface{}) bool {
-	val := reflect.ValueOf(data)
-	if val.Kind() != reflect.Slice {
-		return false
-	}
-
-	// Empty slice cannot be determined
-	if val.Len() == 0 {
-		return false
-	}
-
-	// Check if the first element is a proto.Message
-	firstElem := val.Index(0).Interface()
-	_, ok := firstElem.(proto.Message)
-	return ok
-}
-
-func marshalSliceOfProtoMessages(data interface{}) ([]byte, error) {
-	val := reflect.ValueOf(data)
-	marshaler := protojson.MarshalOptions{
-		Indent:          "  ",
-		EmitUnpopulated: false,
-	}
-
-	var result bytes.Buffer
-	result.WriteString("[\n")
-
-	for i := 0; i < val.Len(); i++ {
-		elem := val.Index(i).Interface()
-		if protoMsg, ok := elem.(proto.Message); ok {
-			elemBytes, err := marshaler.Marshal(protoMsg)
-			if err != nil {
-				return nil, err
-			}
-
+		for i, cell := range row {
 			if i > 0 {
-				result.WriteString(",\n")
+				fmt.Fprint(s.Stdout, "  ")
 			}
-			result.WriteString("  ")
-			result.Write(elemBytes)
+			fmt.Fprintf(s.Stdout, "%-*s", colWidths[i], cell)
 		}
-	}
-
-	result.WriteString("\n]")
-	return result.Bytes(), nil
-}
-
-// convertToSlice attempts to convert data to a slice of interfaces
-func convertToSlice(data interface{}) ([]interface{}, bool) {
-	switch v := data.(type) {
-	case []interface{}:
-		return v, true
-	case []map[string]interface{}:
-		result := make([]interface{}, len(v))
-		for i, item := range v {
-			result[i] = item
-		}
-		return result, true
-	}
-
-	// Use reflection for other slice types
-	result, ok := reflectToSlice(data)
-	return result, ok
-}
-
-// iterateObject iterates over fields/keys of an object and calls the provided function
-func iterateObject(data interface{}, fn func(key string, value interface{})) {
-	switch v := data.(type) {
-	case map[string]interface{}:
-		for k, val := range v {
-			fn(k, val)
-		}
-	case map[string]string:
-		for k, val := range v {
-			fn(k, val)
-		}
-	default:
-		// Use reflection for structs and other types
-		reflectOverObject(data, fn)
+		fmt.Fprintln(s.Stdout)
 	}
 }
 
-// reflectToSlice uses reflection to convert data to a slice
-func reflectToSlice(data interface{}) ([]interface{}, bool) {
-	v := reflect.ValueOf(data)
-
-	// Check if it's a nil interface
-	if !v.IsValid() {
-		return nil, false
-	}
-
-	// Handle pointers
-	if v.Kind() == reflect.Ptr {
-		if v.IsNil() {
-			return nil, false
-		}
-		v = v.Elem()
-	}
-
-	// Check if it's a slice or array
-	if v.Kind() != reflect.Slice && v.Kind() != reflect.Array {
-		return nil, false
-	}
-
-	// Convert each element to interface{}
-	length := v.Len()
-	result := make([]interface{}, length)
-
-	for i := 0; i < length; i++ {
-		result[i] = v.Index(i).Interface()
-	}
-
-	return result, true
-}
-
-// reflectOverObject uses reflection to iterate over an object's fields
-func reflectOverObject(data interface{}, fn func(key string, value interface{})) {
-	v := reflect.ValueOf(data)
-
-	// Check if it's a nil interface
-	if !v.IsValid() {
+// Object processes and displays an object of type T based on the provided configuration
+func (s *IOStream) Object(data interface{}, config []any, opts ObjectOptions) {
+	if data == nil {
 		return
 	}
 
-	// Handle pointers
-	if v.Kind() == reflect.Ptr {
-		if v.IsNil() {
-			return
-		}
-		v = v.Elem()
+	if s.JSONOutput {
+		s.writeJSON(s.Stdout, data)
+		return
 	}
 
-	// Handle different kinds of objects
-	switch v.Kind() {
-	case reflect.Struct:
-		t := v.Type()
-		for i := 0; i < v.NumField(); i++ {
-			field := t.Field(i)
-			// Skip unexported fields
-			if field.PkgPath != "" {
-				continue
+	// For a single object, use processObject
+	s.processObject(data, config, "", opts)
+}
+
+// processObject handles the formatting of a single object with a tree-style layout
+func (s *IOStream) processObject(obj interface{}, config []any, prefix string, opts ObjectOptions) {
+	if obj == nil {
+		return
+	}
+
+	totalConfigs := len(config)
+	for i, cfg := range config {
+		isLast := i == totalConfigs-1
+		var currentPrefix, childPrefix string
+
+		if prefix == "" {
+			// Root level elements
+			if isLast {
+				currentPrefix = "└─ "
+			} else {
+				currentPrefix = "├─ "
 			}
 
-			// Use JSON tag name if available, otherwise use field name
-			name := field.Name
-			if tag, ok := field.Tag.Lookup("json"); ok {
-				parts := strings.Split(tag, ",")
-				if parts[0] != "" && parts[0] != "-" {
-					name = parts[0]
+			if isLast {
+				childPrefix = "    " // Space for child items of last element
+			} else {
+				childPrefix = "│   " // Vertical line for child items
+			}
+		} else {
+			// Already inside a nested structure, maintain the tree
+			currentPrefix = prefix
+			childPrefix = strings.Replace(prefix, "└─", "    ", 1)
+			childPrefix = strings.Replace(childPrefix, "├─", "│   ", 1)
+		}
+
+		switch c := cfg.(type) {
+		case FieldConfig:
+			if !c.Verbose || opts.Full {
+				// Call the format function
+				formatterVal := reflect.ValueOf(c.FormatFunc)
+				args := []reflect.Value{reflect.ValueOf(obj)}
+				result := formatterVal.Call(args)
+				value := result[0].String()
+				if value != "" {
+					fmt.Fprintf(s.Stdout, "%s%s: %s\n", currentPrefix, c.DisplayName, value)
 				}
 			}
+		case ObjectConfig:
+			if opts.Full {
+				// Get the nested object using reflection
+				objVal := reflect.ValueOf(obj)
+				var nestedObj interface{}
 
-			fn(name, v.Field(i).Interface())
-		}
-	case reflect.Map:
-		for _, key := range v.MapKeys() {
-			// Convert the key to string
-			var keyStr string
-			switch k := key.Interface().(type) {
-			case string:
-				keyStr = k
-			case fmt.Stringer:
-				keyStr = k.String()
-			default:
-				keyStr = fmt.Sprintf("%v", k)
+				// Handle path if specified
+				if c.Path != "" {
+					// Find the field based on path
+					if objVal.Kind() == reflect.Ptr {
+						objVal = objVal.Elem()
+					}
+
+					field := objVal.FieldByName(c.Path)
+					if !field.IsValid() {
+						continue
+					}
+					nestedObj = field.Interface()
+				} else {
+					nestedObj = obj
+				}
+
+				if nestedObj != nil {
+					// Print the object header
+					if c.DisplayName != "" {
+						fmt.Fprintf(s.Stdout, "%s%s:\n", currentPrefix, c.DisplayName)
+					}
+
+					// Process the nested object with the tree-style prefix
+					s.processObject(nestedObj, c.Fields, childPrefix, opts)
+				}
 			}
+		case ArrayConfig:
+			if !c.Verbose || opts.Full {
+				// Get the array using reflection
+				objVal := reflect.ValueOf(obj)
+				if objVal.Kind() == reflect.Ptr {
+					objVal = objVal.Elem()
+				}
 
-			fn(keyStr, v.MapIndex(key).Interface())
+				// Find the field based on path
+				field := objVal.FieldByName(c.Path)
+				if !field.IsValid() || field.IsNil() {
+					continue
+				}
+
+				// Print the array header
+				fmt.Fprintf(s.Stdout, "%s%s:\n", currentPrefix, c.DisplayName)
+
+				// Process each item in the array
+				arrayLen := field.Len()
+				for j := 0; j < arrayLen; j++ {
+					item := field.Index(j).Interface()
+
+					// Determine if this is the last item in the array
+					isLastItem := j == arrayLen-1
+
+					// Create an index label
+					indexLabel := fmt.Sprintf("[%d]", j)
+
+					// Choose the appropriate prefix for array items
+					var itemPrefix string
+					if isLastItem {
+						itemPrefix = childPrefix + "└─ " + indexLabel
+					} else {
+						itemPrefix = childPrefix + "├─ " + indexLabel
+					}
+
+					fmt.Fprintf(s.Stdout, "%s\n", itemPrefix)
+
+					// Determine child prefix for array item's fields
+					var itemChildPrefix string
+					if isLastItem {
+						itemChildPrefix = childPrefix + "    ├─ "
+					} else {
+						itemChildPrefix = childPrefix + "│   ├─ "
+					}
+
+					// For the last field in each object, use └─ instead of ├─
+					var itemChildLastPrefix string
+					if isLastItem {
+						itemChildLastPrefix = childPrefix + "    └─ "
+					} else {
+						itemChildLastPrefix = childPrefix + "│   └─ "
+					}
+
+					if c.ObjectConfig != nil {
+						// Process each field of the item
+						fieldsLen := len(c.ObjectConfig.Fields)
+						for k, fieldCfg := range c.ObjectConfig.Fields {
+							isLastField := k == fieldsLen-1
+
+							if fc, ok := fieldCfg.(FieldConfig); ok {
+								formatterVal := reflect.ValueOf(fc.FormatFunc)
+								args := []reflect.Value{reflect.ValueOf(item)}
+								result := formatterVal.Call(args)
+								value := result[0].String()
+
+								if value != "" {
+									fieldPrefix := itemChildPrefix
+									if isLastField {
+										fieldPrefix = itemChildLastPrefix
+									}
+									fmt.Fprintf(s.Stdout, "%s%s: %s\n", fieldPrefix, fc.DisplayName, value)
+								}
+							}
+						}
+					} else if c.FormatFunc != nil {
+						// Format the item using the provided function
+						formatterVal := reflect.ValueOf(c.FormatFunc)
+						args := []reflect.Value{reflect.ValueOf(item)}
+						result := formatterVal.Call(args)
+						value := result[0].String()
+						fmt.Fprintf(s.Stdout, "%s%s\n", itemChildPrefix, value)
+					} else {
+						// Just print the item as a string
+						fmt.Fprintf(s.Stdout, "%s%v\n", itemChildPrefix, item)
+					}
+				}
+			}
 		}
 	}
 }

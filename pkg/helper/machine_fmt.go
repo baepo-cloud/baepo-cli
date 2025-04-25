@@ -2,264 +2,125 @@ package helper
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/baepo-cloud/baepo-cli/pkg/iostream"
 	apiv1pb "github.com/baepo-cloud/baepo-proto/go/baepo/api/v1"
-	"github.com/dustin/go-humanize"
+	corev1pb "github.com/baepo-cloud/baepo-proto/go/baepo/core/v1"
 )
 
-func MachineArrayFmt() iostream.ArrayOptions {
-	return iostream.ArrayOptions{
-		Fields: []iostream.FieldDefinition{
-			{
-				DisplayName: "ID",
-				FormatFunc: func(obj any) string {
-					if m, ok := obj.(*apiv1pb.Machine); ok {
-						return m.Id
-					}
-					return blank
-				},
+// MachineArrayConfig returns the declarative configuration for mapping Machine arrays.
+func MachineMapping() []any {
+	return []any{
+		iostream.FieldConfig{
+			DisplayName: "ID",
+			FormatFunc: func(obj *apiv1pb.Machine) string {
+				return fmt.Sprintf("%s", obj.GetId())
 			},
-			{
-				DisplayName: "Node ID",
-				FormatFunc: func(obj any) string {
-					if m, ok := obj.(*apiv1pb.Machine); ok {
-						return m.GetNodeId()
-					}
-					return blank
-				},
+		},
+		iostream.FieldConfig{
+			DisplayName: "Node ID",
+			FormatFunc: func(obj *apiv1pb.Machine) string {
+				return obj.GetNodeId()
 			},
-			{
-				DisplayName: "Workspace ID",
-				FormatFunc: func(obj any) string {
-					if m, ok := obj.(*apiv1pb.Machine); ok {
-						return m.GetWorkspaceId()
-					}
-					return blank
-				},
+		},
+		iostream.FieldConfig{
+			DisplayName: "Workspace ID",
+			FormatFunc: func(obj *apiv1pb.Machine) string {
+				return obj.GetWorkspaceId()
 			},
-			{
-				DisplayName: "Name",
-				FormatFunc: func(obj any) string {
-					if m, ok := obj.(*apiv1pb.Machine); ok {
-						if m.GetName() == "" {
-							return blank
-						}
-						return m.GetName()
-					}
-					return blank
-				},
+		},
+		iostream.FieldConfig{
+			DisplayName: "Name",
+			FormatFunc: func(obj *apiv1pb.Machine) string {
+				if obj.GetName() == "" {
+					return ""
+				}
+				return obj.GetName()
 			},
-			{
-				DisplayName: "State",
-				FormatFunc: func(obj any) string {
-					if m, ok := obj.(*apiv1pb.Machine); ok {
-						return MachineStateToHumanString(m.GetState())
-					}
-					return blank
+		},
+		iostream.ObjectConfig{
+			Path:        "Spec",
+			DisplayName: "Spec",
+			Full:        true,
+			Fields: []any{
+				iostream.FieldConfig{
+					DisplayName: "CPUs",
+					FormatFunc: func(obj *corev1pb.MachineSpec) string {
+						return fmt.Sprint(obj.Cpus)
+					},
 				},
-			},
-			{
-				DisplayName: "Desired State",
-				FormatFunc: func(obj any) string {
-					if m, ok := obj.(*apiv1pb.Machine); ok {
-						return MachineDesiredStateToHumanString(m.GetDesiredState())
-					}
-					return blank
-				},
-			},
-			{
-				DisplayName: "Started At",
-				FormatFunc: func(obj any) string {
-					if m, ok := obj.(*apiv1pb.Machine); ok {
-						return TimestampToHumanString(m.GetStartedAt())
-					}
-					return blank
-				},
-			},
-			{
-				DisplayName: "Expires At",
-				FormatFunc: func(obj any) string {
-					if m, ok := obj.(*apiv1pb.Machine); ok {
-						return TimestampToHumanString(m.GetExpiresAt())
-					}
-					return blank
-				},
-			},
-			{
-				DisplayName: "Terminated At",
-				FormatFunc: func(obj any) string {
-					if m, ok := obj.(*apiv1pb.Machine); ok {
-						return TimestampToHumanString(m.GetTerminatedAt())
-					}
-					return blank
-				},
-			},
-			{
-				DisplayName: "Termination Cause",
-				FormatFunc: func(obj any) string {
-					if m, ok := obj.(*apiv1pb.Machine); ok {
-						if m.TerminatedAt == nil {
-							return blank
-						}
-						return MachineTerminationCauseToHumanString(m.GetTerminationCause())
-					}
-					return blank
-				},
-			},
-			{
-				DisplayName: "Termination Details",
-				FormatFunc: func(obj any) string {
-					if m, ok := obj.(*apiv1pb.Machine); ok {
-						if m.TerminatedAt == nil {
-							return blank
-						}
-						return m.GetTerminationDetails()
-					}
-					return blank
+				iostream.ArrayConfig{
+					Path:        "Containers",
+					DisplayName: "Containers",
+					ObjectConfig: &iostream.ObjectConfig{
+						Fields: []any{
+							iostream.FieldConfig{
+								DisplayName: "Image",
+								FormatFunc: func(obj *corev1pb.MachineContainerSpec) string {
+									return fmt.Sprint(obj.Image)
+								},
+							},
+							iostream.FieldConfig{
+								DisplayName: "Command",
+								FormatFunc: func(obj *corev1pb.MachineContainerSpec) string {
+									if len(obj.Command) == 0 {
+										return "-"
+									}
+									return strings.Join(obj.Command, " ")
+								},
+							},
+						},
+					},
 				},
 			},
 		},
-	}
-}
-
-func MachineObjectFmt() iostream.ObjectOptions {
-	return iostream.ObjectOptions{
-		Fields: []iostream.FieldDefinition{
-			{
-				DisplayName: "ID",
-				FormatFunc: func(obj any) string {
-					if m, ok := obj.(*apiv1pb.Machine); ok {
-						return m.Id
-					}
-					return blank
-				},
+		iostream.FieldConfig{
+			DisplayName: "State",
+			FormatFunc: func(obj *apiv1pb.Machine) string {
+				return MachineStateToHumanString(obj.GetState())
 			},
-			{
-				DisplayName: "Node ID",
-				FormatFunc: func(obj any) string {
-					if m, ok := obj.(*apiv1pb.Machine); ok {
-						return m.GetNodeId()
-					}
-					return blank
-				},
+		},
+		iostream.FieldConfig{
+			DisplayName: "Desired State",
+			FormatFunc: func(obj *apiv1pb.Machine) string {
+				return MachineDesiredStateToHumanString(obj.GetDesiredState())
 			},
-			{
-				DisplayName: "Workspace ID",
-				FormatFunc: func(obj any) string {
-					if m, ok := obj.(*apiv1pb.Machine); ok {
-						return m.GetWorkspaceId()
-					}
-					return blank
-				},
+		},
+		iostream.FieldConfig{
+			DisplayName: "Started At",
+			FormatFunc: func(obj *apiv1pb.Machine) string {
+				return TimestampToHumanString(obj.GetStartedAt())
 			},
-			{
-				DisplayName: "Name",
-				FormatFunc: func(obj any) string {
-					if m, ok := obj.(*apiv1pb.Machine); ok {
-						if m.GetName() == "" {
-							return blank
-						}
-						return m.GetName()
-					}
-					return blank
-				},
+		},
+		iostream.FieldConfig{
+			DisplayName: "Expires At",
+			FormatFunc: func(obj *apiv1pb.Machine) string {
+				return TimestampToHumanString(obj.GetExpiresAt())
 			},
-			{
-				DisplayName: "Spec / Cores",
-				FormatFunc: func(obj any) string {
-					if m, ok := obj.(*apiv1pb.Machine); ok {
-						return fmt.Sprintf("%d", m.GetSpec().GetCpus())
-					}
-					return blank
-				},
+		},
+		iostream.FieldConfig{
+			DisplayName: "Terminated At",
+			FormatFunc: func(obj *apiv1pb.Machine) string {
+				return TimestampToHumanString(obj.GetTerminatedAt())
 			},
-			{
-				DisplayName: "Spec / RAM",
-				FormatFunc: func(obj any) string {
-					if m, ok := obj.(*apiv1pb.Machine); ok {
-						return humanize.Bytes(m.GetSpec().GetMemoryMb() * 1024 * 1024)
-					}
-					return blank
-				},
+		},
+		iostream.FieldConfig{
+			DisplayName: "Termination Cause",
+			FormatFunc: func(obj *apiv1pb.Machine) string {
+				if obj.TerminatedAt == nil {
+					return ""
+				}
+				return MachineTerminationCauseToHumanString(obj.GetTerminationCause())
 			},
-			{
-				DisplayName: "State",
-				FormatFunc: func(obj any) string {
-					if m, ok := obj.(*apiv1pb.Machine); ok {
-						return MachineStateToHumanString(m.GetState())
-					}
-					return blank
-				},
-			},
-			{
-				DisplayName: "Desired State",
-				FormatFunc: func(obj any) string {
-					if m, ok := obj.(*apiv1pb.Machine); ok {
-						return MachineDesiredStateToHumanString(m.GetDesiredState())
-					}
-					return blank
-				},
-			},
-			{
-				DisplayName: "Created At",
-				FormatFunc: func(obj any) string {
-					if m, ok := obj.(*apiv1pb.Machine); ok {
-						return TimestampToHumanString(m.GetCreatedAt())
-					}
-					return blank
-				},
-			},
-			{
-				DisplayName: "Started At",
-				FormatFunc: func(obj any) string {
-					if m, ok := obj.(*apiv1pb.Machine); ok {
-						return TimestampToHumanString(m.GetStartedAt())
-					}
-					return blank
-				},
-			},
-			{
-				DisplayName: "Expires At",
-				FormatFunc: func(obj any) string {
-					if m, ok := obj.(*apiv1pb.Machine); ok {
-						return TimestampToHumanString(m.GetExpiresAt())
-					}
-					return blank
-				},
-			},
-			{
-				DisplayName: "Terminated At",
-				FormatFunc: func(obj any) string {
-					if m, ok := obj.(*apiv1pb.Machine); ok {
-						return TimestampToHumanString(m.GetTerminatedAt())
-					}
-					return blank
-				},
-			},
-			{
-				DisplayName: "Termination Cause",
-				FormatFunc: func(obj any) string {
-					if m, ok := obj.(*apiv1pb.Machine); ok {
-						if m.TerminatedAt == nil {
-							return blank
-						}
-						return MachineTerminationCauseToHumanString(m.GetTerminationCause())
-					}
-					return blank
-				},
-			},
-			{
-				DisplayName: "Termination Details",
-				FormatFunc: func(obj any) string {
-					if m, ok := obj.(*apiv1pb.Machine); ok {
-						if m.TerminatedAt == nil {
-							return blank
-						}
-						return m.GetTerminationDetails()
-					}
-					return blank
-				},
+		},
+		iostream.FieldConfig{
+			DisplayName: "Termination Details",
+			FormatFunc: func(obj *apiv1pb.Machine) string {
+				if obj.TerminatedAt == nil {
+					return ""
+				}
+				return obj.GetTerminationDetails()
 			},
 		},
 	}

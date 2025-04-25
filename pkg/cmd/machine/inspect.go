@@ -7,6 +7,7 @@ import (
 	"github.com/baepo-cloud/baepo-cli/pkg/app"
 	"github.com/baepo-cloud/baepo-cli/pkg/baepoerrors"
 	"github.com/baepo-cloud/baepo-cli/pkg/helper"
+	"github.com/baepo-cloud/baepo-cli/pkg/iostream"
 	apiv1pb "github.com/baepo-cloud/baepo-proto/go/baepo/api/v1"
 	"github.com/spf13/cobra"
 )
@@ -35,7 +36,7 @@ func newInspectCmd() *cobra.Command {
 				return baepoerrors.MachineError
 			}
 
-			a.IOStream.Object(m.Msg.Machine, helper.MachineObjectFmt())
+			a.IOStream.Object(m.Msg.Machine, helper.MachineMapping(), iostream.ObjectOptions{Full: true})
 
 			return nil
 		},
