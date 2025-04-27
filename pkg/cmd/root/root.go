@@ -1,10 +1,14 @@
 package root
 
 import (
+	"slices"
+	"strings"
+
 	"github.com/MakeNowJust/heredoc"
 	"github.com/baepo-cloud/baepo-cli/pkg/app"
 	"github.com/baepo-cloud/baepo-cli/pkg/baepoerrors"
 	"github.com/baepo-cloud/baepo-cli/pkg/cmd/auth"
+	"github.com/baepo-cloud/baepo-cli/pkg/cmd/contextcmd"
 	"github.com/baepo-cloud/baepo-cli/pkg/cmd/machine"
 	"github.com/baepo-cloud/baepo-cli/pkg/config"
 	"github.com/baepo-cloud/baepo-cli/pkg/iostream"
@@ -50,8 +54,9 @@ func NewCmdRoot() *cobra.Command {
 				return baepoerrors.ConfigError
 			}
 
-			p := cmd.Parent()
-			if cfg.CurrentContext.SecretKey == nil && (p == nil || p.Name() != "auth") {
+			p := getFirstSubcommand(cmd)
+
+			if cfg.CurrentContext.SecretKey == nil && !slices.Contains([]string{"auth", "context"}, p) {
 				a.IOStream.Error("No secret key found in the current context. Please login to Baepo using the command: baepo auth login --email <email> --password <password>")
 				return baepoerrors.AuthError
 			}
@@ -66,8 +71,31 @@ func NewCmdRoot() *cobra.Command {
 	cmd.PersistentFlags().StringVarP(&rootFlagCurrentContext, "context", "x", "default", "Set the current context")
 	cmd.PersistentFlags().BoolVarP(&rootJSONOutput, "json", "j", false, "Output in JSON format")
 
+	cmd.AddCommand(contextcmd.NewContextCmd())
 	cmd.AddCommand(auth.NewAuthCmd())
 	cmd.AddCommand(machine.NewMachineCmd())
 
 	return cmd
+}
+
+func getFirstSubcommand(cmd *cobra.Command) string {
+	// Walk up the command chain to find the root command
+	root := cmd
+	for root.Parent() != nil {
+		root = root.Parent()
+	}
+
+	// Get the command path from root to the current command
+	cmdPath := cmd.CommandPath()
+
+	// Split the command path to extract components
+	parts := strings.Fields(cmdPath)
+
+	// If there's only the root command or less, return empty string
+	if len(parts) <= 1 {
+		return ""
+	}
+
+	// The first subcommand is the second part (index 1)
+	return parts[1]
 }
