@@ -56,7 +56,7 @@ func NewCmdRoot() *cobra.Command {
 
 			p := getFirstSubcommand(cmd)
 
-			if cfg.CurrentContext.SecretKey == nil && !slices.Contains([]string{"auth", "context"}, p) {
+			if cfg.CurrentContext.SecretKey == "" && !slices.Contains([]string{"auth", "context"}, p) {
 				a.IOStream.Error("No secret key found in the current context. Please login to Baepo using the command: baepo auth login --email <email> --password <password>")
 				return baepoerrors.AuthError
 			}

@@ -19,16 +19,16 @@ type Config struct {
 }
 
 type Context struct {
-	SecretKey   *string `yaml:"secret_key" env:"BAEPO_SECRET_KEY"`
-	WorkspaceID *string `yaml:"workspace_id" env:"BAEPO_WORKSPACE_ID"`
-	UserID      *string `yaml:"user_id" env:"BAEPO_USER_ID"`
-	URL         string  `yaml:"url" env:"BAEPO_URL"`
+	SecretKey   string `yaml:"secret_key"  env:"BAEPO_SECRET_KEY" env-upd:""`
+	WorkspaceID string `yaml:"workspace_id" env:"BAEPO_WORKSPACE_ID" env-upd:""`
+	UserID      string `yaml:"user_id" env:"BAEPO_USER_ID" env-upd:""`
+	URL         string `yaml:"url" env:"BAEPO_URL" env-upd:""`
 }
 
 var DefaultContext = &Context{
-	SecretKey:   nil,
-	WorkspaceID: nil,
-	UserID:      nil,
+	SecretKey:   "",
+	WorkspaceID: "",
+	UserID:      "",
 	URL:         "http://138.201.222.180:3000/",
 }
 
@@ -43,6 +43,7 @@ var DefaultContext = &Context{
 // It can be surcharged by the environment variable BAEPO_CURRENT_CONTEXT.
 // Also SecretKey and WorkspaceID can be surcharged by the environment variables BAEPO_SECRET_KEY and BAEPO_WORKSPACE_ID.
 func LoadConfig(currentContext string) (*Config, error) {
+
 	var configuration *Config
 	// Get config file path
 	homeDir, err := os.UserHomeDir()
@@ -103,7 +104,10 @@ func LoadConfig(currentContext string) (*Config, error) {
 	// Set the current context
 	configuration.CurrentContext = selectedContext
 
-	cleanenv.UpdateEnv(&configuration.CurrentContext)
+	err = cleanenv.UpdateEnv(configuration.CurrentContext)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update environment variables: %w", err)
+	}
 
 	return configuration, nil
 }

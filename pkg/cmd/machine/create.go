@@ -192,7 +192,7 @@ baepo machine create --name mydb --cpus 4 --memory 8192 --containers '[{"image":
 
 			// Create the machine
 			req := connect.NewRequest(&apiv1pb.MachineCreateRequest{
-				WorkspaceId: *a.Config.CurrentContext.WorkspaceID,
+				WorkspaceId: a.Config.CurrentContext.WorkspaceID,
 				Spec:        spec,
 				Start:       start,
 			})

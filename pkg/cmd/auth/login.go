@@ -39,8 +39,8 @@ func newLoginCmd() *cobra.Command {
 				return baepoerrors.AuthError
 			}
 
-			a.Config.CurrentContext.SecretKey = &login.Msg.SecretKey
-			a.Config.CurrentContext.UserID = &login.Msg.UserId
+			a.Config.CurrentContext.SecretKey = login.Msg.SecretKey
+			a.Config.CurrentContext.UserID = login.Msg.UserId
 
 			me, err := a.UserClient.Me(ctx, connect.NewRequest(&emptypb.Empty{}))
 			if err != nil {
@@ -48,7 +48,7 @@ func newLoginCmd() *cobra.Command {
 				return baepoerrors.AuthError
 			}
 
-			a.Config.CurrentContext.WorkspaceID = &me.Msg.User.WorkspaceId
+			a.Config.CurrentContext.WorkspaceID = me.Msg.User.WorkspaceId
 
 			err = config.SaveConfig(a.Config)
 			if err != nil {

@@ -24,7 +24,7 @@ func newListCmd() *cobra.Command {
 			a := app.FromContext(ctx)
 
 			list, err := a.MachineClient.List(ctx, connect.NewRequest(&apiv1pb.MachineListRequest{
-				WorkspaceId: *a.Config.CurrentContext.WorkspaceID,
+				WorkspaceId: a.Config.CurrentContext.WorkspaceID,
 			}))
 
 			if err != nil {

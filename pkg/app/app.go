@@ -43,9 +43,9 @@ func AuthenticatedClientOption(cfg *config.Config) connect.ClientOption {
 		connect.UnaryInterceptorFunc(
 			func(next connect.UnaryFunc) connect.UnaryFunc {
 				return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-					if cfg.CurrentContext.UserID != nil && cfg.CurrentContext.SecretKey != nil {
+					if cfg.CurrentContext.UserID != "" && cfg.CurrentContext.SecretKey != "" {
 						token := base64.StdEncoding.EncodeToString(
-							[]byte(fmt.Sprintf("%s:%s", *cfg.CurrentContext.UserID, *cfg.CurrentContext.SecretKey)),
+							[]byte(fmt.Sprintf("%s:%s", cfg.CurrentContext.UserID, cfg.CurrentContext.SecretKey)),
 						)
 
 						req.Header().Set("Authorization", fmt.Sprintf("Bearer %s", token))

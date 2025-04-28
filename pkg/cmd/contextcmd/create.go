@@ -50,12 +50,12 @@ baepo context create mycompany --current
 			newContext := *config.DefaultContext
 
 			if workspaceID != "" {
-				newContext.WorkspaceID = &workspaceID
+				newContext.WorkspaceID = workspaceID
 			}
 
 			if userID != "" {
-				newContext.UserID = &userID
-				newContext.SecretKey = &secretKey
+				newContext.UserID = userID
+				newContext.SecretKey = secretKey
 			}
 
 			if url != "" {

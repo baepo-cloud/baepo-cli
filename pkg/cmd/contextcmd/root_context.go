@@ -45,6 +45,7 @@ func NewContextCmd() *cobra.Command {
 
 	cmd.AddCommand(newCreateCmd())
 	cmd.AddCommand(newUseCmd())
+	cmd.AddCommand(newListCmd())
 
 	return cmd
 
